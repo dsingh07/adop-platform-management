@@ -7,6 +7,10 @@ def loadPlatformExtensionJob = freeStyleJob(platformManagementFolderName + "/Loa
  
 // Setup setup_cartridge
 loadPlatformExtensionJob.with{
+    environmentVariables {
+        keepBuildVariables(true)
+        keepSystemVariables(true)
+    }
     wrappers {
         preBuildCleanup()
         sshAgent('adop-jenkins-master')
@@ -41,7 +45,16 @@ loadPlatformExtensionJob.with{
     steps {
         shell('''#!/bin/bash -ex
 
-echo "This job loads the platform extension ${GIT_URL}"
+# Source metadata
+if [ -f ${WORKSPACE}/extension.metadata ]; then
+    source ${WORKSPACE}/extension.metadata
+fi
+
+echo "This job loads the platform extension from: ${GIT_URL}"
+echo "Platform Extension: ${PLATFORM_EXTENSION_NAME}"
+        
+        ''')
+        shell('''#!/bin/bash -ex
 
 # Source metadata
 if [ -f ${WORKSPACE}/extension.metadata ]; then
@@ -158,6 +171,47 @@ if [ -d ${WORKSPACE}/service/aws ]; then
     fi
 fi
 
-''')
+        ''')
+        shell('''#!/bin/bash -e
+
+# Source metadata
+if [ -f ${WORKSPACE}/extension.metadata ]; then
+    source ${WORKSPACE}/extension.metadata
+fi
+
+
+# Deploy any addtional groovy classes to your Job DSL additional classpath
+if [ -d ${WORKSPACE}/service_ext/jenkins/job_dsl_additional_classpath/ ]; then
+    
+    GROOVY=$(find "${WORKSPACE}/service_ext/jenkins/job_dsl_additional_classpath" -name *.groovy|head -n1)
+    
+    if [ ! -z "$GROOVY" ]; then
+        
+        echo "Found addtional SCM Provider classes: "
+        find ${WORKSPACE}/service_ext/jenkins/job_dsl_additional_classpath/* -type f -printf "%f\n"
+        
+        for file in $(find ${WORKSPACE}/service_ext/jenkins/job_dsl_additional_classpath/* -type f -printf "%f\n"); do
+            
+            # Adding files to your Job DSL additional classpath
+            echo "Deploying file ${file##*/} to your classpath..."
+            
+            if [ $(docker exec jenkins find ${PLUGGABLE_SCM_PROVIDER_PATH} -type f -name ${file##*/} -printf "%f\n") == ${file##*/} ]; then
+                echo "WARNING: File ${file##*/} already exists in your classpath: $(docker exec jenkins find ${PLUGGABLE_SCM_PROVIDER_PATH} -type f -name ${file##*/} -print)"
+                echo "Contents will be over-written..."
+            fi
+
+        done
+        
+        # Copying files into Jenkins additional Job DSL classpath 
+        cp -r ${WORKSPACE}/service_ext/jenkins/job_dsl_additional_classpath temp_dir
+        docker cp temp_dir/*/ jenkins:${PLUGGABLE_SCM_PROVIDER_PATH}
+        docker exec jenkins find ${PLUGGABLE_SCM_PROVIDER_PATH} -name "*.md" -type f -delete
+        echo "Files successfully copied into the Jenkins additional classpath"
+        
+    else
+        echo "INFO: No additional groovy classes in found for your platform extension"
+    fi
+fi
+        ''')
     }
 }

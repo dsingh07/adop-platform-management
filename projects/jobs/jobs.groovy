@@ -92,7 +92,6 @@ loadCartridgeJob.with{
         if (customScmNamespace == "true"){
           stringParam('SCM_NAMESPACE', '', 'The namespace for your SCM provider which will prefix your created repositories')
         }
-        choiceParam('CARTRIDGE_CLONE_URL', cartridge_list, 'Cartridge URL to load')
         stringParam('CARTRIDGE_FOLDER', '', 'The folder within the project namespace where your cartridge will be loaded into.')
         stringParam('FOLDER_DISPLAY_NAME', '', 'Display name of the folder where the cartridge is loaded.')
         stringParam('FOLDER_DESCRIPTION', '', 'Description of the folder where the cartridge is loaded.')
@@ -125,9 +124,6 @@ cp -r ${PLUGGABLE_SCM_PROVIDER_PATH}pluggable $WORKSPACE/job_dsl_additional_clas
 # Output SCM provider ID to a properties file
 echo SCM_PROVIDER_ID=$(echo ${SCM_PROVIDER} | cut -d "(" -f2 | cut -d ")" -f1) > scm_provider_id.properties
 ''')
-        environmentVariables {
-          propertiesFile('scm_provider_id.properties')
-        }
         systemGroovyCommand('''import pluggable.scm.PropertiesSCMProviderDataStore
 import pluggable.scm.SCMProviderDataStore
 import pluggable.configuration.EnvVarProperty;
@@ -274,6 +270,7 @@ xmlFiles.each {
     scriptSource {
         stringScriptSource {
             command('''import pluggable.scm.SCMProvider;
+import pluggable.scm.SCMProviderHandler;
 import pluggable.configuration.EnvVarProperty;
 
 EnvVarProperty envVarProperty = EnvVarProperty.getInstance();
@@ -289,7 +286,13 @@ def workspace = envVarProperty.getProperty('WORKSPACE')
 def projectFolderName = envVarProperty.getProperty('PROJECT_NAME')
 def cartridgeFolder = envVarProperty.getProperty('CARTRIDGE_FOLDER')
 def overwriteRepos = envVarProperty.getProperty('OVERWRITE_REPOS')
-def scmNamespace = ''' + namespaceValue + '''
+
+if (envVarProperty.hasProperty('SCM_NAMESPACE')){
+  def scmNamespace = envVarProperty.getProperty('SCM_NAMESPACE')
+}else{
+  scmNamespace = ""
+}
+
 def codeReviewEnabled = envVarProperty.getProperty('ENABLE_CODE_REVIEW')
 
 String repoNamespace = null;
